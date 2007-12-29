@@ -1,0 +1,21 @@
+# =======================================================
+# Sample .lircrc file for testing 
+# =======================================================
+begin
+  prog = lclient_test
+  remote = son-cable
+  button = CABLE_PLAY
+  config = PLAY
+end
+begin
+  prog = lclient_test
+  remote = son-cable
+  button = CABLE_PAUSE 
+  config = PAUSE
+end
+begin
+  prog = lclient_test
+  remote = son-cable
+  button = CABLE_STOP 
+  config = STOP
+end

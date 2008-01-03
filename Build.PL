@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Module::Build;
 
-my $build = $Module::Build->new(
+my $build = Module::Build->new(
 	module_name				=> 'Lirc::Client',
 	license					=> 'perl',
 	create_readme			=>  1,

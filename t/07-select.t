@@ -11,8 +11,8 @@ use_ok( "Lirc::Client" );
 
 my $lirc=Lirc::Client->new( {
 		prog	=> "lirc-client-test",
-		rcfile	=> "samples/lircrc.2",
-		debug	=> 1,
+		rcfile	=> "samples/lircrc.3",
+		debug	=> 0,
 		fake	=> 1,
 	} );
 ok( $lirc, "created a lirc object");

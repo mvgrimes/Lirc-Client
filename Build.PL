@@ -5,13 +5,14 @@ use Module::Build;
 my $build = Module::Build->new(
 	module_name				=> 'Lirc::Client',
 	license					=> 'perl',
-	create_readme			=>  1,
+	# create_readme			=>  1,
 	create_makefile_pl		=>	'passthrough',
 	requires				=> {
 					'IO::Socket'	            => '1.0',
 					'Hash::Util'	            => 0,
 					'Class::Accessor::Fast'	    => 0,
 					'Carp'			            => 0,
+                    'File::Path::Expand'        => 0,
 		},
     build_requires  => {        
                         'Test::More'        => 0,

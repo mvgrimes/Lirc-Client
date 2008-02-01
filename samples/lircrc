@@ -13,9 +13,22 @@ begin
   button = CABLE_PAUSE 
   config = PAUSE
 end
+include <samples/lircrc.inc>
 begin
   prog = lclient_test
   remote = son-cable
   button = CABLE_STOP 
   config = STOP
 end
+begin
+  prog = lclient_test
+  remote = *
+  button = BUTTON_1
+  config = button_1
+end
+begin
+  prog = lclient_test
+  button = BUTTON_2
+  config = button_2
+end
+

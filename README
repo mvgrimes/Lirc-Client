@@ -1,0 +1,38 @@
+This is the README file for the Lirc::Client module writen to provide a
+simple Perl interface with the Lirc.
+
+INSTALLATION
+
+	Installs with the typical
+		perl Build.PL
+		./Build	
+		./Build test
+		./Build install
+
+SUPPORT AND DOCUMENTATION
+
+	After installing, you can find documentation for this module with the
+	perldoc command.
+
+		perldoc Lirc::Client
+
+	You can also look for information at:
+
+		RT, CPAN's request tracker
+			http://rt.cpan.org/NoAuth/Bugs.html?Dist=Lirc-Client
+
+		Search CPAN
+			http://search.cpan.org/dist/Lirc-Client
+
+
+COPYRIGHT AND LICENSE
+
+Copyright (c) 2008 Mark V. Grimes. All rights reserved. This program
+is free software; you can redistribute it and/or modify it under the
+same terms as Perl itself. 
+
+********************************************************************
+By using this module you agree to take all responsibility for any
+problems which occur including, but not limited to, any unexpected
+data loss.
+********************************************************************

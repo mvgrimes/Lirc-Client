@@ -6,7 +6,7 @@ package Lirc::Client;
 # $Id: Client.pm,v 1.28 2007/12/10 22:45:58 mgrimes Exp $
 #
 # Package to interact with the LIRC deamon
-# Copyright (c) 2001 Mark Grimes (mgrimes AT alumni DOT duke DOT edu).
+# Copyright (c) 2008 Mark Grimes (mgrimes AT alumni DOT duke DOT edu).
 # All rights reserved. This program is free software; you can redistribute
 # it and/or modify it under the same terms as Perl itself.
 #
@@ -15,9 +15,12 @@ package Lirc::Client;
 # Parts of this package were inspired by
 #  hotornot.pl by michael@engsoc.org, and
 #  Perl LIRC Client (plircc) by Matti Airas (mairas@iki.fi)
+# See http://www.lirc.org/html/technical.html for specs
 # Thanks!
 #
 ###########################################################################
+
+# TODO: see the todo section of the pod
 
 use strict;
 use warnings;
@@ -25,13 +28,9 @@ use base qw(Class::Accessor::Fast);
 use Hash::Util qw(lock_keys);	# Lock a hash so no new keys can be added
 use Carp;
 use IO::Socket;
+use File::Path::Expand;
 
-# use POSIX qw(:errno_h);
-# use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
-
-# TODO: watch for signals from lircd to re-read rc file
-
-our $VERSION = '1.29';
+our $VERSION = '1.50';
 our $DEBUG = 0;		# Class level debug flag
 
 # #########################################################
@@ -48,22 +47,18 @@ my %fields = (		# List of all the fields which will have accessors
 	'debug'		=> 0,			# instance debug flag
 	'fake'		=> 0,			# fake the lirc connection
 	'sock'		=> undef,		# the lircd socket
+    'mode'      => '',
 );
+__PACKAGE__->mk_accessors( keys %fields );
 
-Lirc::Client->mk_accessors( keys %fields );
-
-# -------------------------------------------------------------------------------
-# LircClient->new( <program>, [<lircrc-file>], [<lircd-device>],
-#                               [<debug-flag>], [<fake-lircd>] );
-#
 sub new {
 	my $that  = shift;
 	my $class = ref($that) || $that;	# Enables use to call $instance->new()
 	my $self  = {
 		'_DEBUG' 		=> 0,			# Instance level debug flag
-		'_mode'			=> '',
 		'_in_block'		=> 0,
 		'_commands'		=> {},
+        '_startup_mode' => undef,
 		'_buf'			=> '',
 		%fields,
 	};
@@ -104,7 +99,8 @@ sub _initialize {
 			or croak "couldn't connect to $self->{dev}: $!";
 	}
 
-	$self->_parse_lircrc;
+	$self->_parse_lircrc( $self->{rcfile} );
+    $self->{mode} = $self->{_startup_mode} if defined $self->{_startup_mode};
 	return 1;
 }
 
@@ -118,68 +114,105 @@ sub clean_up {
 
 # -------------------------------------------------------------------------------
 
-sub _parse_lircrc { ## no critic  
-  my $self = shift;
+sub _parse_lircrc {     ## no critic
+    my $self = shift;
+    my $rcfilename = shift;
 
-  # This is too complicated and uses if/elsif/elsif/...
-  # TODO: fix it when we can use "given"
-  ## no critic
+    open( my $rcfile, '<', $rcfilename )
+        or croak "couldn't open lircrc file ($rcfilename): $!";
 
-  open( my $rcfile, '<', $self->{rcfile} )
-      or croak "couldn't open lircrc file ($self->{rcfile}): $!";
+    my $in_block = 0;
+    my $cur_mode = '';
+    my $ops = {};
 
-  my $in_block = 0;
-  my $cur_mode = '';
-  my %commands;
+    while(<$rcfile>){
+        s/^\s*#.*$//g;  # remove commented lines
+        chomp;          
+        print "> ($rcfilename) ($cur_mode) $_\n" if $self->debug;
 
-  my ($prog, $remote, $button, $repeat, $config, $mode, $flags);
-  while(<$rcfile>){
-    s/^\s*#.*$//g;                            # remove commented lines
+        ## begin block
+        /^\s*begin\s*$/i && do { 
+            $in_block && croak "Found begin inside a block in line: $_\n";
+            $in_block = 1;
+            next;
+        };
 
-    # print "> ($cur_mode) $_" if ($self->{debug} & D_PARSE);
+        ## end block
+        /^\s*end\s*$/i && do {
+            croak "found end outside of a block in line: $_\n" unless $in_block;
 
-    if     (  /^\s*begin\s*$/i            ){  # begin block
-      $in_block and croak "Found begin inside a block in line: $_\n";
-      $in_block = 1;
+            if( defined $ops->{flags} && $ops->{flags} =~ /\bstartup_mode\b/ ){
+                croak "startup_mode flag given without a mode line"
+                    unless defined $ops->{mode};
+                $self->{_startup_mode} = $ops->{mode};
+                next;
+            }
 
-    } elsif(  /^\s*end\s*(\w*)\s*$/i          ){  # end block
-      if( $1 ){
-        if( $cur_mode eq $1 ){ $cur_mode = ''; next; }
-        else { croak "end \"$1\": found without associated begin mode"; }
-      }
+            croak "end of block found without a prog code at line: $_\n"
+                unless defined $ops->{prog};
+            $ops->{remote} ||= '*';
+            my $key = join '-', $ops->{remote}, $ops->{button}, $cur_mode;
+            my $val = $ops;
 
-      $in_block or croak "Found end outside of a block in line: $_\n";
-      $in_block = 0;
-      defined $prog or croak "end of block found without a prog code at line: $_\n";
-      next if( $prog ne $self->{prog} );
-      $commands{"$remote-$button-$cur_mode"} = { conf => $config, rep => $repeat, mode => $mode, flag => $flags };
-      ($prog, $remote, $button, $repeat, $config, $mode, $flags) = (undef, undef, undef, undef, undef, undef, undef, undef );
+            $in_block = 0;
+            $ops = {};
 
-    } elsif( /^\s*begin\s*(\w+)\s*$/i      ){  # begin mode block
-      croak "found embedded mode line: $_\n" if $cur_mode;
-      croak "begin mode found inside command block: $_\n" if $in_block;
-      $cur_mode = $1;
+            next unless $val->{prog} eq $self->{prog};
 
-    } elsif(  /^\s*(\w+)\s*=\s*(.*?)\s*$/  ){  # command
-      my ($tok, $act) = ($1, $2);
-      if   ($tok =~ /^prog$/i)  { $prog    = $act; }
-      elsif($tok =~ /^remote$/i){  $remote  = $act; }
-      elsif($tok =~ /^button$/i){  $button  = $act; }
-      elsif($tok =~ /^repeat$/i){  $repeat  = $act; }
-      elsif($tok =~ /^config$/i){  $config  = $act; }
-      elsif($tok =~ /^mode$/i)  {  $mode    = $act; }
-      elsif($tok =~ /^flags$/i)  {  $flags  = $act; }
 
-    } elsif(  /^\s*$/                     ){  # blank line
-      # do nothing
-    } else {                                  # unrecognized
-      croak "Couldn't parse lircrc file ($self->{rcfile}) error in line: $_\n";
+            $self->{_commands}->{$key} = $val;
+
+            next;
+        };
+
+        ## token = arg
+        /^\s*([\w-]+)\s*=\s*(.*?)\s*$/ && do {
+            my ($tok, $act) = ($1, $2);
+            croak "unknown token found in rc file: $_\n"
+                unless $tok =~ /^(prog|remote|button|repeat|config|mode|flags)$/i;
+            $ops->{$tok} = $act;
+
+            next;
+        };
+
+        ## begin mode
+        /^\s*begin\s*([\w-]+)\s*$/i && do { 
+            croak "found embedded mode line: $_\n" if $1 && $cur_mode;
+            $self->{_startup_mode} = $1 if $1 eq $self->{prog};
+            $cur_mode = $1;
+            next;
+        };
+
+        ## end mode
+        /^\s*end\s*([\w-]+)\s*$/i && do {
+            croak "end $1: found inside a begin/end block" if $in_block;
+            croak "end $1: found without associated begin mode"
+                unless $cur_mode eq $1;
+
+            $cur_mode = '';
+            next;
+        };
+
+        ## include file
+        /^include\s+(.*)\s*$/ && do {
+            my $file = $1;
+            $file =~ s/^["<]|[">]$//g;
+            $file = eval { expand_filename( $file ) };
+            croak "error parsing include statement: $_\n" if $@;
+            croak "could not find file ($file) in include: $_\n" unless -r $file;
+            $self->_parse_lircrc( $file );
+            next;
+        };
+
+        ## blank lines
+        /^\s*$/ && next;
+
+        ## unrecognized
+        croak "Couldn't parse lircrc file ($self->{rcfile}) error in line: $_\n";
     }
-  }
-  close $rcfile;
-  $self->{_commands} = \%commands;
+    close $rcfile;
 
-  return;
+    return;
 }
 
 # -------------------------------------------------------------------------------
@@ -187,18 +220,19 @@ sub _parse_lircrc { ## no critic
 sub recognized_commands {
   my $self = shift;
 
-  my %commands = %{$self->{_commands}};
-  my @list;
-  foreach my $c (keys %commands){
-    push @list, "$c:\n  ";
-    my %conf = %{$commands{$c}};
-    foreach my $i (keys %conf){
-      my $a = defined $conf{$i} ? $conf{$i} : 'undef';
-      push @list, "$i => $a,\n  ";
-    }
-    push @list, "\n";
-  }
-  return @list;
+  return $self->{_commands};
+
+  # my @list;
+  # foreach my $c (keys %commands){
+  #   push @list, "$c:\n  ";
+  #   my %conf = %{$commands{$c}};
+  #   foreach my $i (keys %conf){
+  #     my $a = defined $conf{$i} ? $conf{$i} : 'undef';
+  #     push @list, "$i => $a,\n  ";
+  #   }
+  #   push @list, "\n";
+  # }
+  # return @list;
 }
 
 # -------------------------------------------------------------------------------
@@ -228,7 +262,7 @@ sub _get_lines {
 }
 	
 sub nextcodes {
-	return $_[0]->next_codes();
+	return shift->next_codes();
 }
 
 sub next_codes {
@@ -249,7 +283,7 @@ sub next_codes {
 }
 
 sub nextcode {
-	return $_[0]->next_code();
+	return shift->next_code();
 }
 
 sub next_code {
@@ -268,13 +302,15 @@ sub next_code {
 
 # -------------------------------------------------------------------------------
 
-sub parse_line {			# parse a line read from lircd
+sub parse_line {			## parse a line read from lircd
 	my $self = shift;
 	$_ = shift;
 
 	print "> ($self->{_in_block}) $_\n" if $self->debug;
 
 	# Take care of response blocks
+    ## Right Lirc::Client doesn't support LIST or VERSION, so we can ignore
+    ## Responses that come inside a block
 	if( /^\s*BEGIN\s*$/ ){
 		croak "got BEGIN inside a block from lircd: $_" if $self->{_in_block};
 		$self->{_in_block} = 1;
@@ -296,19 +332,25 @@ sub parse_line {			# parse a line read from lircd
 		return;
 	};
 
-	my %commands = %{$self->{_commands}};
-	my $cur_mode = $self->{_mode};
-	exists $commands{"$remote-$button-$cur_mode"} or return;
-	my %command = %{$commands{"$remote-$button-$cur_mode"}};
+	my $commands = $self->{_commands};
+	my $cur_mode = $self->{mode};
+	my $command  = $commands->{"$remote-$button-$cur_mode"}
+                || $commands->{"*-$button-$cur_mode"}
+                || $commands->{"$remote-*-$cur_mode"};
+	defined $command or return;
 
-	my $rep_count = 2**32;  # default repeat count
-	if( defined $command{rep} && $command{rep} ){ $rep_count = $command{rep}; }
+	my $rep_count = $command->{rep};
+    $rep_count = 2**32 unless defined $rep_count;  # default repeat count
 
 	if( hex($repeat) % $rep_count != 0 ){ return; }
-	if( defined $command{mode} ){ $self->{mode} = $command{mode}; }
+    if( defined $command->{flags} && $command->{flags} =~ /\bmode\b/ ){
+        $self->{mode} = '';
+    }
+	if( defined $command->{mode} ){ $self->{mode} = $command->{mode}; }
 
-	print ">> $button accepted --> $command{conf}\n" if $self->debug;
-	return $command{conf};
+    return unless defined $command->{config};
+	print ">> $button accepted --> @{[ $command->{config} ]}\n" if $self->debug;
+	return $command->{config};
 }
 
 sub DESTROY {
@@ -328,7 +370,7 @@ sub DESTROY {
 #
 # #########################################################
 
-sub debug {
+sub debug { ## no critic
 	my $self = shift;
 
 	if(@_){				# Set the debug level
@@ -383,16 +425,18 @@ device.
 
 =item new( program, \%options )
 
+  my $lirc = Lirc::Client->new( {    
+               prog    => 'progname',           # required
+               rcfile  => "$ENV{HOME}/.lircrc", # optional
+               dev     => "/dev/lircd",         # optional
+               debug   => 0,                    # optional
+               fake    => 1,                    # optional
+        } );
+
+  # Depreciated positional syntax; don't use
   my $lirc = Lirc::Client->new( 'progname',    # required
                "$ENV{HOME}/.lircrc",           # optional
                '/dev/lircd', 0, 0 );           # optional
-
-  my $lirc = Lirc::Client->new( 'progname', {     # required
-               rcfile    => "$ENV{HOME}/.lircrc", # optional
-               dev        => "/dev/lircd",        # optional
-               debug    => 0,                     # optional
-               fake    => 1,                      # optional
-        } );
 
 The constructor accepts two calling forms: an ordered list (for backwards
 compatibility), and a hash ref of configuration options. The two forms
@@ -409,10 +453,10 @@ primarily useful for debuging.
 
 =item recognized_commands()
 
-  my @list = $lirc->recongnized_commands();
+  my @list = $lirc->recongnized_commands;
 
 Returns a list of all the recongnized commands for this application (as
-defined in the call to B<new>.
+defined in C<prog> parameter to the call to B<new>).
 
 =item next_code()
 
@@ -422,9 +466,7 @@ defined in the call to B<new>.
 
 Retrieves the next IR command associated with the B<progname> as defined in
 B<new()>, blocking if none is available. B<next_code> uses the stdio read
-commands which are buffered. Use B<next_codes> if you are also using
-select.
-
+commands which are buffered. Use B<next_codes> if you are also using select.
 
 =item next_codes()
 
@@ -464,7 +506,7 @@ B<Event> module on cpan for a nice way to handle your event loops.
 
 =item sock()
 
-  my $sock = $lirc->sock();
+  my $sock = $lirc->sock;
 
 Returns (or sets if an arguement is passed) the socket from which to read
 lirc commands. This can be used to work Lirc::Client into you own event 
@@ -481,7 +523,7 @@ Lirc::Cli
 
 =item clean_up()
 
-  $lirc->clean_up();
+  $lirc->clean_up;
 
 Closes the Lirc device pipe, etc. B<clean_up> will be called when the lirc
 object goes out of scope, so this is not necessary.
@@ -493,6 +535,54 @@ object goes out of scope, so this is not necessary.
 Return the debug status for the lirc object.
 
 =back
+
+=head1 TODO
+
+Features that are outlined in the C<.lircrc> specification which have not yet
+been implmeneted include:
+
+=over 4
+
+=item * The mode should be independent of the prog token
+
+=item * Implement the C<once> flag
+
+=item * Implement the C<quit> flag and executing multiple entries
+
+=item * Support for multiple C<config> entries
+
+=item * Implement the C<delay> token
+
+=item * Supprot non-printable charaters in the C<config> command
+
+=item * Support key sequenses (multiple C<remote>, C<button> entries per block)
+    
+=item * Support VERSION and LIST commands
+
+=item * Watch for signals from lircd to re-read rc file (C<SIGHUP>)
+
+=item * Add C<SEND_*> support
+
+=back
+
+Features that have been recently implemented include:
+
+=over 4
+
+=item * Support for C<mode>s
+
+=item * Recognizing the C<startup_mode> flag and automatically starting in 
+a mode that is identical to the program name
+
+=item * The C<include> directive
+
+=item * Support wild card C<*> entries for C<remote> or C<button>, and blocks
+that lack a C<remote>
+
+=back
+
+If anyone has need of one or more of these features, please let me know
+(via http://rt.cpan.org if possible).
 
 =head1 SEE ALSO
 
@@ -506,14 +596,19 @@ Return the debug status for the lirc object.
 
 Mark Grimes E<lt>mgrimes@cpan.orgE<gt>
 
+=head1 BUGS
+
+There are a few features that a .lircrc file is supposed to support
+(according to http://www.lirc.org/html/configure.html#lircrc_format) that 
+have not yet been implemented. See TODO for a list.
+
+See http://rt.cpan.org to view and report bugs
+
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2006 by Mark Grimes
+Copyright (C) 2008 by Mark Grimes
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.2 or,
 at your option, any later version of Perl 5 you may have available.
 
-=head1 BUGS
-
-None of which I am aware. Please let me know if you find any.

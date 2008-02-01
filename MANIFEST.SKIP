@@ -1,0 +1,11 @@
+^_build
+^Build$
+^blib
+~$
+\.bak$
+^.svn/
+/\.svn/
+^MANIFEST\.SKIP$
+^Lirc-Client-\d\.\d+
+.releaserc
+TODO

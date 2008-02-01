@@ -4,10 +4,10 @@ use strict;
 use warnings;
 use Lirc::Client;
 
-                            
-my $lirc = Lirc::Client->new('lclient-test',{
-        rcfile    => "./lircrc", 
-        debug    => 1,
+my $lirc = Lirc::Client->new({
+        prog    => 'lclient-test',
+        rcfile  => "./lircrc", 
+        debug   => 1,
         fake    => 0,
     });
 

@@ -1,14 +1,20 @@
-MANIFEST
-ChangeLog
-Makefile.PL
 Build.PL
-README
+ChangeLog
 lib/Lirc/Client.pm
+Makefile.PL
+MANIFEST
+META.yml			Module meta-data (added by MakeMaker)
+README
 samples/lircrc
 samples/lircrc.2
+samples/lircrc.3
+samples/lircrc.4
+samples/lircrc.inc
+samples/test.pl
 t/00-new.t
 t/03-parse.t
 t/05-nextcode.t
+t/06-startup_mode.t
 t/07-select.t
 t/10-lircd.t
 t/96-kwalitee.t
@@ -16,4 +22,3 @@ t/97-critic.t
 t/98-pod.t
 t/99-podcoverage.t
 t/perlcriticrc
-META.yml                                 Module meta-data (added by MakeMaker)

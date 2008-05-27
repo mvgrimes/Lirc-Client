@@ -3,3 +3,6 @@
 
 # Lirc::Client has a bunch of short re the /x flag seems like overkill
 [-RegularExpressions::RequireExtendedFormatting]
+
+# The whole point of L:C is to open and continually read from a filehandle
+[-InputOutput::RequireBriefOpen]

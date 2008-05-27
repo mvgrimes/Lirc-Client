@@ -30,7 +30,7 @@ use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
-our $VERSION = '1.50';
+our $VERSION = '1.51';
 our $DEBUG = 0;		# Class level debug flag
 
 # #########################################################
@@ -93,7 +93,7 @@ sub _initialize {
 	if( $self->{fake} ){
 		$self->{sock} = \*STDIN;
 	} else {
-		$self->{sock} = IO::Socket->new(Domain => &AF_UNIX,
+		$self->{sock} = IO::Socket->new(Domain => &AF_UNIX,   
 				Type    => SOCK_STREAM,
 				Peer    => $self->{dev} )
 			or croak "couldn't connect to $self->{dev}: $!";
@@ -339,10 +339,9 @@ sub parse_line {			## parse a line read from lircd
                 || $commands->{"$remote-*-$cur_mode"};
 	defined $command or return;
 
-	my $rep_count = $command->{rep};
-    $rep_count = 2**32 unless defined $rep_count;  # default repeat count
-
-	if( hex($repeat) % $rep_count != 0 ){ return; }
+	my $rep_count = $command->{repeat};  # default repeat count is 0 (ignore repeated keys)
+    return if $rep_count ? hex($repeat) % $rep_count : hex $repeat;
+  
     if( defined $command->{flags} && $command->{flags} =~ /\bmode\b/ ){
         $self->{mode} = '';
     }

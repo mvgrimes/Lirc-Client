@@ -30,7 +30,7 @@ use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
-our $VERSION = '1.51';
+our $VERSION = '1.52';
 our $DEBUG = 0;		# Class level debug flag
 
 # #########################################################
@@ -452,9 +452,9 @@ primarily useful for debuging.
 
 =item recognized_commands()
 
-  my @list = $lirc->recongnized_commands;
+  my @list = $lirc->recognized_commands;
 
-Returns a list of all the recongnized commands for this application (as
+Returns a list of all the recognized commands for this application (as
 defined in C<prog> parameter to the call to B<new>).
 
 =item next_code()

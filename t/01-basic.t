@@ -3,10 +3,8 @@
 use strict;
 use warnings;
 
-use Test::More tests => 13;
-
-# Test set 1 -- can we load the library?
-BEGIN { use_ok( 'Lirc::Client' ); };
+use Test::More tests => 12;
+use Lirc::Client;
 
 # Test set 2 -- create client with ordered list of arguements
 my $lirc = Lirc::Client->new( 'lclient_test', 'samples/lircrc', undef, 1, 1 );

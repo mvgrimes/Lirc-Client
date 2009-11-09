@@ -25,13 +25,13 @@ package Lirc::Client;
 use strict;
 use warnings;
 use base qw(Class::Accessor::Fast);
-use Hash::Util qw(lock_keys);	# Lock a hash so no new keys can be added
+use Hash::Util qw(lock_keys);    # Lock a hash so no new keys can be added
 use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
 our $VERSION = '1.52';
-our $DEBUG = 0;		# Class level debug flag
+our $DEBUG   = 0;                # Class level debug flag
 
 # #########################################################
 #
@@ -40,98 +40,99 @@ our $DEBUG = 0;		# Class level debug flag
 #
 # #########################################################
 
-my %fields = (		# List of all the fields which will have accessors
-	'prog'		=> undef,		# the program name from lircrc file
-	'rcfile'	=> "$ENV{HOME}/.lircrc",	# location of lircrc
-	'dev'		=> '/dev/lircd',			# location of the lircd device
-	'debug'		=> 0,			# instance debug flag
-	'fake'		=> 0,			# fake the lirc connection
-	'sock'		=> undef,		# the lircd socket
-    'mode'      => '',
+my %fields = (    # List of all the fields which will have accessors
+    'prog'   => undef,                   # the program name from lircrc file
+    'rcfile' => "$ENV{HOME}/.lircrc",    # location of lircrc
+    'dev'    => '/dev/lircd',            # location of the lircd device
+    'debug'  => 0,                       # instance debug flag
+    'fake'   => 0,                       # fake the lirc connection
+    'sock'   => undef,                   # the lircd socket
+    'mode'   => '',
 );
 __PACKAGE__->mk_accessors( keys %fields );
 
 sub new {
-	my $that  = shift;
-	my $class = ref($that) || $that;	# Enables use to call $instance->new()
-	my $self  = {
-		'_DEBUG' 		=> 0,			# Instance level debug flag
-		'_in_block'		=> 0,
-		'_commands'		=> {},
+    my $that  = shift;
+    my $class = ref($that) || $that;     # Enables use to call $instance->new()
+    my $self  = {
+        '_DEBUG'        => 0,            # Instance level debug flag
+        '_in_block'     => 0,
+        '_commands'     => {},
         '_startup_mode' => undef,
-		'_buf'			=> '',
-		%fields,
-	};
+        '_buf'          => '',
+        %fields,
+    };
 
-	# Process the arguments
-	my $cfg = {}; 
-	for(qw/prog rcfile dev debug fake/){	# get any passed by order
-		my $arg = shift;
-		($cfg=$arg and last) if ref $arg eq 'HASH';
-		$self->{$_} = $arg if defined $arg;
-	}
-	while(my ($k,$v) = each %$cfg ){		# now take care of those by name
-		$self->{$k} = $v;
-	}
-	bless $self, $class;
+    # Process the arguments
+    my $cfg = {};
+    for (qw/prog rcfile dev debug fake/) {    # get any passed by order
+        my $arg = shift;
+        ( $cfg = $arg and last ) if ref $arg eq 'HASH';
+        $self->{$_} = $arg if defined $arg;
+    }
+    while ( my ( $k, $v ) = each %$cfg ) {    # now take care of those by name
+        $self->{$k} = $v;
+    }
+    bless $self, $class;
 
-	# Lock the $self hashref, so we don't accidentally add a key!
-	# TODO: how does this impact inheritance?
-	lock_keys( %$self );
+    # Lock the $self hashref, so we don't accidentally add a key!
+    # TODO: how does this impact inheritance?
+    lock_keys(%$self);
 
-	croak "Lirc::Client not passed a program name" unless $self->prog;
+    croak "Lirc::Client not passed a program name" unless $self->prog;
     $self->_initialize()
-        or croak "Lircd::Client couldn't initialize device $self->{dev}: $!";
-	return $self;
+      or croak "Lircd::Client couldn't initialize device $self->{dev}: $!";
+    return $self;
 }
 
 #  -------------------------------------------------------------------------------
 
 sub _initialize {
-	my $self = shift;
+    my $self = shift;
 
-	if( $self->{fake} ){
-		$self->{sock} = \*STDIN;
-	} else {
-		$self->{sock} = IO::Socket->new(Domain => &AF_UNIX,   
-				Type    => SOCK_STREAM,
-				Peer    => $self->{dev} )
-			or croak "couldn't connect to $self->{dev}: $!";
-	}
+    if ( $self->{fake} ) {
+        $self->{sock} = \*STDIN;
+    } else {
+        $self->{sock} = IO::Socket->new(
+            Domain => &AF_UNIX,
+            Type   => SOCK_STREAM,
+            Peer   => $self->{dev}
+        ) or croak "couldn't connect to $self->{dev}: $!";
+    }
 
-	$self->_parse_lircrc( $self->{rcfile} );
+    $self->_parse_lircrc( $self->{rcfile} );
     $self->{mode} = $self->{_startup_mode} if defined $self->{_startup_mode};
-	return 1;
+    return 1;
 }
 
 # -------------------------------------------------------------------------------
 
 sub clean_up {
-	my $self = shift;
-	close $self->{sock} unless $self->{fake};
+    my $self = shift;
+    close $self->{sock} unless $self->{fake};
     return;
 }
 
 # -------------------------------------------------------------------------------
 
-sub _parse_lircrc {     ## no critic
-    my $self = shift;
+sub _parse_lircrc {    ## no critic
+    my $self       = shift;
     my $rcfilename = shift;
 
     open( my $rcfile, '<', $rcfilename )
-        or croak "couldn't open lircrc file ($rcfilename): $!";
+      or croak "couldn't open lircrc file ($rcfilename): $!";
 
     my $in_block = 0;
     my $cur_mode = '';
-    my $ops = {};
+    my $ops      = {};
 
-    while(<$rcfile>){
-        s/^\s*#.*$//g;  # remove commented lines
-        chomp;          
+    while (<$rcfile>) {
+        s/^\s*#.*$//g;    # remove commented lines
+        chomp;
         print "> ($rcfilename) ($cur_mode) $_\n" if $self->debug;
 
         ## begin block
-        /^\s*begin\s*$/i && do { 
+        /^\s*begin\s*$/i && do {
             $in_block && croak "Found begin inside a block in line: $_\n";
             $in_block = 1;
             next;
@@ -141,24 +142,24 @@ sub _parse_lircrc {     ## no critic
         /^\s*end\s*$/i && do {
             croak "found end outside of a block in line: $_\n" unless $in_block;
 
-            if( defined $ops->{flags} && $ops->{flags} =~ /\bstartup_mode\b/ ){
+            if ( defined $ops->{flags} && $ops->{flags} =~ /\bstartup_mode\b/ )
+            {
                 croak "startup_mode flag given without a mode line"
-                    unless defined $ops->{mode};
+                  unless defined $ops->{mode};
                 $self->{_startup_mode} = $ops->{mode};
                 next;
             }
 
             croak "end of block found without a prog code at line: $_\n"
-                unless defined $ops->{prog};
+              unless defined $ops->{prog};
             $ops->{remote} ||= '*';
             my $key = join '-', $ops->{remote}, $ops->{button}, $cur_mode;
             my $val = $ops;
 
             $in_block = 0;
-            $ops = {};
+            $ops      = {};
 
             next unless $val->{prog} eq $self->{prog};
-
 
             $self->{_commands}->{$key} = $val;
 
@@ -167,16 +168,16 @@ sub _parse_lircrc {     ## no critic
 
         ## token = arg
         /^\s*([\w-]+)\s*=\s*(.*?)\s*$/ && do {
-            my ($tok, $act) = ($1, $2);
+            my ( $tok, $act ) = ( $1, $2 );
             croak "unknown token found in rc file: $_\n"
-                unless $tok =~ /^(prog|remote|button|repeat|config|mode|flags)$/i;
+              unless $tok =~ /^(prog|remote|button|repeat|config|mode|flags)$/i;
             $ops->{$tok} = $act;
 
             next;
         };
 
         ## begin mode
-        /^\s*begin\s*([\w-]+)\s*$/i && do { 
+        /^\s*begin\s*([\w-]+)\s*$/i && do {
             croak "found embedded mode line: $_\n" if $1 && $cur_mode;
             $self->{_startup_mode} = $1 if $1 eq $self->{prog};
             $cur_mode = $1;
@@ -187,7 +188,7 @@ sub _parse_lircrc {     ## no critic
         /^\s*end\s*([\w-]+)\s*$/i && do {
             croak "end $1: found inside a begin/end block" if $in_block;
             croak "end $1: found without associated begin mode"
-                unless $cur_mode eq $1;
+              unless $cur_mode eq $1;
 
             $cur_mode = '';
             next;
@@ -197,10 +198,11 @@ sub _parse_lircrc {     ## no critic
         /^include\s+(.*)\s*$/ && do {
             my $file = $1;
             $file =~ s/^["<]|[">]$//g;
-            $file = eval { expand_filename( $file ) };
+            $file = eval { expand_filename($file) };
             croak "error parsing include statement: $_\n" if $@;
-            croak "could not find file ($file) in include: $_\n" unless -r $file;
-            $self->_parse_lircrc( $file );
+            croak "could not find file ($file) in include: $_\n"
+              unless -r $file;
+            $self->_parse_lircrc($file);
             next;
         };
 
@@ -208,7 +210,8 @@ sub _parse_lircrc {     ## no critic
         /^\s*$/ && next;
 
         ## unrecognized
-        croak "Couldn't parse lircrc file ($self->{rcfile}) error in line: $_\n";
+        croak
+          "Couldn't parse lircrc file ($self->{rcfile}) error in line: $_\n";
     }
     close $rcfile;
 
@@ -218,145 +221,149 @@ sub _parse_lircrc {     ## no critic
 # -------------------------------------------------------------------------------
 
 sub recognized_commands {
-  my $self = shift;
+    my $self = shift;
 
-  return $self->{_commands};
+    return $self->{_commands};
 
-  # my @list;
-  # foreach my $c (keys %commands){
-  #   push @list, "$c:\n  ";
-  #   my %conf = %{$commands{$c}};
-  #   foreach my $i (keys %conf){
-  #     my $a = defined $conf{$i} ? $conf{$i} : 'undef';
-  #     push @list, "$i => $a,\n  ";
-  #   }
-  #   push @list, "\n";
-  # }
-  # return @list;
+    # my @list;
+    # foreach my $c (keys %commands){
+    #   push @list, "$c:\n  ";
+    #   my %conf = %{$commands{$c}};
+    #   foreach my $i (keys %conf){
+    #     my $a = defined $conf{$i} ? $conf{$i} : 'undef';
+    #     push @list, "$i => $a,\n  ";
+    #   }
+    #   push @list, "\n";
+    # }
+    # return @list;
 }
 
 # -------------------------------------------------------------------------------
 
-
 sub _get_lines {
-	my $self = shift;
+    my $self = shift;
 
-	# what is in the buffer now?
-	print "buffer1=", $self->{_buf}, "\n" if $self->debug;
+    # what is in the buffer now?
+    print "buffer1=", $self->{_buf}, "\n" if $self->debug;
 
-	# read anything in the pipe
-	my $buf;
-	my $status = sysread( $self->sock, $buf, 512 );
-	( carp "bad status from read" and return ) unless defined $status;
+    # read anything in the pipe
+    my $buf;
+    my $status = sysread( $self->sock, $buf, 512 );
+    ( carp "bad status from read" and return ) unless defined $status;
 
-	# what is in the buffer after the read?
-	$self->{_buf} .= $buf;
-	print "buffer2=", $self->{_buf}, "\n" if $self->debug;
+    # what is in the buffer after the read?
+    $self->{_buf} .= $buf;
+    print "buffer2=", $self->{_buf}, "\n" if $self->debug;
 
-	# separate the lines, leaving partial lines on _buf
+    # separate the lines, leaving partial lines on _buf
     my @lines;
-	push @lines, $1 while( $self->{_buf} =~ s/^(.+)\n// );  ## no critic
-                # while() tests that s/// matched
+    push @lines, $1 while ( $self->{_buf} =~ s/^(.+)\n// );    ## no critic
+           # while() tests that s/// matched
 
-	return @lines;
+    return @lines;
 }
-	
+
 sub nextcodes {
-	return shift->next_codes();
+    return shift->next_codes();
 }
 
 sub next_codes {
-  my $self = shift;
+    my $self = shift;
 
-  my @lines = $self->_get_lines;
-  print "==", join( ", ", map { defined $_ ? $_ : "undef" }  @lines ), "\n" if $self->debug;
-  return () unless scalar @lines;
-  my @commands = ();
-  for my $line (@lines){
-	  chomp $line;
-	  print "Line: $line\n" if $self->debug;
-	  my $command = $self->parse_line( $line );
-	  print "Command: ", (defined $command ? $command : "undef"), "\n" if $self->debug;
-	  push @commands, $command if defined $command;
-  }
-  return @commands;
+    my @lines = $self->_get_lines;
+    print "==", join( ", ", map { defined $_ ? $_ : "undef" } @lines ), "\n"
+      if $self->debug;
+    return () unless scalar @lines;
+    my @commands = ();
+    for my $line (@lines) {
+        chomp $line;
+        print "Line: $line\n" if $self->debug;
+        my $command = $self->parse_line($line);
+        print "Command: ", ( defined $command ? $command : "undef" ), "\n"
+          if $self->debug;
+        push @commands, $command if defined $command;
+    }
+    return @commands;
 }
 
 sub nextcode {
-	return shift->next_code();
+    return shift->next_code();
 }
 
 sub next_code {
-  my $self = shift;
+    my $self = shift;
 
-  my $fh = $self->sock;
-  while( defined (my $line = <$fh>) ){
-	  chomp $line;
-	  print "Line: $line\n" if $self->debug;
-	  my $command = $self->parse_line( $line );
-	  print "Command: ", (defined $command ? $command : "undef"), "\n" if $self->debug;
-	  return $command if defined $command;
-  }
-  return; # no command found and lirc exited?
+    my $fh = $self->sock;
+    while ( defined( my $line = <$fh> ) ) {
+        chomp $line;
+        print "Line: $line\n" if $self->debug;
+        my $command = $self->parse_line($line);
+        print "Command: ", ( defined $command ? $command : "undef" ), "\n"
+          if $self->debug;
+        return $command if defined $command;
+    }
+    return;    # no command found and lirc exited?
 }
 
 # -------------------------------------------------------------------------------
 
-sub parse_line {			## parse a line read from lircd
-	my $self = shift;
-	$_ = shift;
+sub parse_line {    ## parse a line read from lircd
+    my $self = shift;
+    $_ = shift;
 
-	print "> ($self->{_in_block}) $_\n" if $self->debug;
+    print "> ($self->{_in_block}) $_\n" if $self->debug;
 
-	# Take care of response blocks
+    # Take care of response blocks
     ## Right Lirc::Client doesn't support LIST or VERSION, so we can ignore
     ## Responses that come inside a block
-	if( /^\s*BEGIN\s*$/ ){
-		croak "got BEGIN inside a block from lircd: $_" if $self->{_in_block};
-		$self->{_in_block} = 1;
-		return;
-	}
-	if( /^\s*END\s*$/ ){
-		croak "got END outside a block from lircd: $_" if! $self->{_in_block};
-		$self->{_in_block} = 0;
-		return;
-	}
-	return if $self->{_in_block};
+    if (/^\s*BEGIN\s*$/) {
+        croak "got BEGIN inside a block from lircd: $_" if $self->{_in_block};
+        $self->{_in_block} = 1;
+        return;
+    }
+    if (/^\s*END\s*$/) {
+        croak "got END outside a block from lircd: $_" if !$self->{_in_block};
+        $self->{_in_block} = 0;
+        return;
+    }
+    return if $self->{_in_block};
 
-	# Decipher IR Command
-	# http://www.lirc.org/html/technical.html#applications
-	# <hexcode> <repeat count> <button name> <remote name>
-	my ($hex, $repeat, $button, $remote) = split /\s+/;
-	defined $button and length $button or do {
-		carp "Unable to decode.\n";
-		return;
-	};
+    # Decipher IR Command
+    # http://www.lirc.org/html/technical.html#applications
+    # <hexcode> <repeat count> <button name> <remote name>
+    my ( $hex, $repeat, $button, $remote ) = split /\s+/;
+    defined $button and length $button or do {
+        carp "Unable to decode.\n";
+        return;
+    };
 
-	my $commands = $self->{_commands};
-	my $cur_mode = $self->{mode};
-	my $command  = $commands->{"$remote-$button-$cur_mode"}
-                || $commands->{"*-$button-$cur_mode"}
-                || $commands->{"$remote-*-$cur_mode"};
-	defined $command or return;
+    my $commands = $self->{_commands};
+    my $cur_mode = $self->{mode};
+    my $command =
+         $commands->{"$remote-$button-$cur_mode"}
+      || $commands->{"*-$button-$cur_mode"}
+      || $commands->{"$remote-*-$cur_mode"};
+    defined $command or return;
 
-	my $rep_count = $command->{repeat};  # default repeat count is 0 (ignore repeated keys)
+    my $rep_count =
+      $command->{repeat};    # default repeat count is 0 (ignore repeated keys)
     return if $rep_count ? hex($repeat) % $rep_count : hex $repeat;
-  
-    if( defined $command->{flags} && $command->{flags} =~ /\bmode\b/ ){
+
+    if ( defined $command->{flags} && $command->{flags} =~ /\bmode\b/ ) {
         $self->{mode} = '';
     }
-	if( defined $command->{mode} ){ $self->{mode} = $command->{mode}; }
+    if ( defined $command->{mode} ) { $self->{mode} = $command->{mode}; }
 
     return unless defined $command->{config};
-	print ">> $button accepted --> @{[ $command->{config} ]}\n" if $self->debug;
-	return $command->{config};
+    print ">> $button accepted --> @{[ $command->{config} ]}\n" if $self->debug;
+    return $command->{config};
 }
 
 sub DESTROY {
-	my $self = shift;
-	print __PACKAGE__, ": DESTROY\n" if $self->debug;
+    my $self = shift;
+    print __PACKAGE__, ": DESTROY\n" if $self->debug;
 
-	$self->clean_up;
+    $self->clean_up;
     return;
 }
 
@@ -369,26 +376,26 @@ sub DESTROY {
 #
 # #########################################################
 
-sub debug { ## no critic
-	my $self = shift;
+sub debug {    ## no critic
+    my $self = shift;
 
-	if(@_){				# Set the debug level
-		my $level = shift;
-		if( ref($self) ){
-			$self->{debug} = $level;
-		} else {
-			$DEBUG = $level;
-		}
-		# Call the parent class debug method
+    if (@_) {    # Set the debug level
+        my $level = shift;
+        if ( ref($self) ) {
+            $self->{debug} = $level;
+        } else {
+            $DEBUG = $level;
+        }
+
+        # Call the parent class debug method
         # TODO: check that it is an inherited class
-		# $self->SUPER::debug($debug);
-	} 
+        # $self->SUPER::debug($debug);
+    }
 
-	return $DEBUG || $self->{debug};
+    return $DEBUG || $self->{debug};
 }
 
 1;
-
 
 __END__
 

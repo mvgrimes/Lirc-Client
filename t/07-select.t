@@ -1,13 +1,11 @@
-#!/usr/bin/perl
-
 use strict;
 use warnings;
 
-use Test::More tests=>5;
+use Test::More tests=>3;
 use IO::Handle;
 
-use_ok( "IO::Select"   );
-use_ok( "Lirc::Client" );
+use IO::Select;
+use Lirc::Client;
 
 my $lirc=Lirc::Client->new( {
 		prog	=> "lirc-client-test",

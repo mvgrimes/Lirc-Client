@@ -1,0 +1,1 @@
+../../templates/perl-module/t/00-load.t

@@ -1,0 +1,1 @@
+../../templates/perl-module/t/96-kwalitee.t

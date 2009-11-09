@@ -1,0 +1,1 @@
+../../templates/perl-module/t/99-podcoverage.t

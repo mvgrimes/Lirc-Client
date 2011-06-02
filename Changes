@@ -1,0 +1,7 @@
+# Lirc::Client - Significant changes since the last public release
+
+1.54 - Thu Jun  2 11:36:54 EDT 2011
+	* Bug fix: check that $self->{sock} is defined before closing it in
+	clean_up. Improvement suggested by Bernhard Mahr. Thanks!
+	* Converted AUTHOR_TEST to xt/ tests.
+	* Fixed spelling error in pod

@@ -30,7 +30,7 @@ use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
-our $VERSION = '1.52';
+our $VERSION = '1.54';
 our $DEBUG   = 0;                # Class level debug flag
 
 # #########################################################
@@ -109,7 +109,11 @@ sub _initialize {
 
 sub clean_up {
     my $self = shift;
-    close $self->{sock} unless $self->{fake};
+
+    if( defined $self->{sock} ){
+        close $self->{sock} unless $self->{fake};
+    }
+
     return;
 }
 
@@ -612,7 +616,7 @@ See http://rt.cpan.org to view and report bugs
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2008 by Mark Grimes
+Copyright (C) 2011 by Mark Grimes
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.2 or,

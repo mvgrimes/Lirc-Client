@@ -4,8 +4,10 @@
 ~$
 \.bak$
 ^.svn/
+^.git/
 /\.svn/
 ^MANIFEST\.SKIP$
 ^Lirc-Client-\d\.\d+
 .releaserc
 TODO
+^MYMETA.yml$

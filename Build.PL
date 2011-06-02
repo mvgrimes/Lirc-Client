@@ -6,8 +6,6 @@ my $build = Module::Build->new(
     module_name => 'Lirc::Client',
     license     => 'perl',
 
-    # create_readme			=>  1,
-    create_makefile_pl => 'passthrough',
     requires           => {
         'IO::Socket'            => '1.0',
         'Hash::Util'            => 0,

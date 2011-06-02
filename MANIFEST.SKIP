@@ -11,3 +11,4 @@
 .releaserc
 TODO
 ^MYMETA.yml$
+.gitignore

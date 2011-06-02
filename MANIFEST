@@ -2,6 +2,7 @@ Build.PL
 Changes
 lib/Lirc/Client.pm
 MANIFEST
+META.yml
 README
 samples/lircrc
 samples/lircrc.2

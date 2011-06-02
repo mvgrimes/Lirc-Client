@@ -1,5 +1,7 @@
 Build
 MANIFEST.bak
 MYMETA.yml
+META.yml
 _build/
 blib/
+Lirc-Client-*.tar.gz

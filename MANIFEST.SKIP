@@ -12,3 +12,4 @@
 TODO
 ^MYMETA.yml$
 .gitignore
+^MYMETA\.json$

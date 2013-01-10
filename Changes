@@ -1,5 +1,9 @@
 # Lirc::Client - Significant changes since the last public release
 
+1.55 - Wed Jan  9 20:18:46 EST 2013
+    Bail out of Build.PL on Windows. LIRC doesn't run on windows, so there
+    is no need to support it. Some tests might hang when run under windows.
+
 1.54 - Thu Jun  2 11:36:54 EDT 2011
 	* Bug fix: check that $self->{sock} is defined before closing it in
 	clean_up. Improvement suggested by Bernhard Mahr. Thanks!

@@ -2,6 +2,8 @@ Build
 MANIFEST.bak
 MYMETA.yml
 META.yml
+Changes.bak
+MYMETA.json
 _build/
 blib/
 Lirc-Client-*.tar.gz

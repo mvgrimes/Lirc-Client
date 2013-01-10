@@ -1,8 +1,7 @@
 Build.PL
 Changes
 lib/Lirc/Client.pm
-MANIFEST
-META.yml
+MANIFEST			This list of files
 README
 samples/lircrc
 samples/lircrc.2

@@ -25,6 +25,9 @@ my $build = Module::Build->new(
     # 	},
 );
 
+# LIRC doesn't work on Windows, so no need for this module to support it
+die "No support for OS" if $^O eq 'MSWin32';
+
 # $build->add_build_element('gif');
 $build->create_build_script;
 

@@ -30,7 +30,7 @@ use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
-our $VERSION = '1.54';
+our $VERSION = '1.55';
 our $DEBUG   = 0;                # Class level debug flag
 
 # #########################################################

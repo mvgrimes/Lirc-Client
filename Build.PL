@@ -3,8 +3,9 @@ use warnings;
 use Module::Build;
 
 my $build = Module::Build->new(
-    module_name => 'Lirc::Client',
-    license     => 'perl',
+    module_name   => 'Lirc::Client',
+    license       => 'perl',
+    create_readme => 1,
 
     requires => {
         'Moo'                => '1.0',
@@ -17,6 +18,14 @@ my $build = Module::Build->new(
         'File::Spec' => 0,
         'IO::Select' => 0,
         'IO::Handle' => 0,
+    },
+
+    meta_merge => {
+        resources => {
+            bugtracker =>
+              'http://rt.cpan.org/NoAuth/Bugs.html?Dist=Lirc-Client',
+            repository => 'http://github.com/mvgrimes/Lirc-Client'
+        }
     },
 );
 

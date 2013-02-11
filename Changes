@@ -1,5 +1,12 @@
 # Lirc::Client - Significant changes since the last public release
 
+2.00 - Sun Feb 10 19:44:37 EST 2013
+    Converts to Moo for object system
+    - Maintains speed, but makes code much more clean.
+
+    Various cleanup and xt test improvements
+    Cleanup of the support files
+
 1.55 - Wed Jan  9 20:18:46 EST 2013
     Bail out of Build.PL on Windows. LIRC doesn't run on windows, so there
     is no need to support it. Some tests might hang when run under windows.

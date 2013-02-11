@@ -8,3 +8,4 @@ META.json
 _build/
 blib/
 Lirc-Client-*.tar.gz
+*.pm.bak

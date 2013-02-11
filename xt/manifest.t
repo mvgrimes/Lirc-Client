@@ -1,12 +1,22 @@
+#!/usr/bin/env perl
+
 # Test that the module MANIFEST is up-to-date
 use strict;
-use warnings;
-use Test::More;
+
+BEGIN {
+    $|  = 1;
+    $^W = 1;
+}
 
 my @MODULES = ( 'Test::DistManifest 1.003', );
 
+# Don't run tests during end-user installs
+use Test::More;
+# plan( skip_all => 'Author tests not required for installation' )
+#   unless ( $ENV{RELEASE_TESTING} );
+
 # Load the testing modules
-for my $MODULE (@MODULES) {
+foreach my $MODULE (@MODULES) {
     eval "use $MODULE";
     if ($@) {
         $ENV{RELEASE_TESTING}
@@ -16,4 +26,5 @@ for my $MODULE (@MODULES) {
 }
 
 manifest_ok();
+
 1;

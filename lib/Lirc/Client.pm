@@ -2,6 +2,8 @@ package Lirc::Client;
 
 # ABSTACT: A client library for the Linux Infrared Remote Control
 
+use strict;
+use warnings;
 use Moo;
 use Carp;
 use IO::Socket;
@@ -323,11 +325,11 @@ Lirc::Client - A client library for the Linux Infrared Remote Control
   ...
   my $lirc = Lirc::Client->new({ prog => 'progname' });
   my $code;
-  do {                            # Loop while getting ir codes
-    $code = $lirc->next_code;     # wait for a new ir code
+  do {                         # Loop while getting ir codes
+    $code = $lirc->next_code;  # wait for a new ir code
     print "Lirc> $code\n";
-    process( $code );             # do whatever you want with the code
-  } while( defined $code );       # undef will be returned when lirc dev exists
+    process( $code );          # do whatever you want with the code
+  } while( defined $code );    # undef will be returned when lirc dev exits
 
 =head1 DESCRIPTION
 
@@ -336,12 +338,10 @@ Control (Lirc). The module encapsulates parsing the Lirc config file (.lircrc),
 opening a connection to the Lirc device, and retrieving events from the 
 device.
 
-=head2 Use Details
-
-=over 4
+=head1 METHODS
 
 
-=item new( program, \%options )
+=head2 new( program, \%options )
 
   my $lirc = Lirc::Client->new( {    
                prog    => 'progname',           # required
@@ -351,8 +351,6 @@ device.
                fake    => 1,                    # optional
         } );
 
-=item new( program, [rcfile], [dev], [debug], [fake] )
-
   # Depreciated positional syntax; don't use
   my $lirc = Lirc::Client->new( 'progname',    # required
                "$ENV{HOME}/.lircrc",           # optional
@@ -360,27 +358,48 @@ device.
 
 The constructor accepts two calling forms: an ordered list (for backwards
 compatibility), and a hash ref of configuration options. The two forms
-can be combined as long as the hash ref is last. 
+can be combined as long as the hash ref is last.
+
+=over 4
+
+=item prog    => 'progname'
+
+Required parameter identifying the program token for Lirc.
+
+=item rcfile  => "$ENV{HOME}/.lircrc"
+
+Path to the C<.lircrc> configuration file. Optional.
+
+=item dev     => "/dev/lircd"
+
+The path to the Lirc device. Optional.
+
+=item debug   => 0
+
+Flag to turn on debugging output. Optional.
+
+=item fake    => 1
+
+Will cause Lirc::Client to read from STDIN rather than the lircd device. 
+This is meant to facilitate debugging and testing. Optional.
+
+=back
 
 When called the constructor defines the program token used in the Lirc
 config file, opens and parses the Lirc config file (B<rcfile> defaults to
 ~/.lircrc if none specified), connects to the Lirc device (B<dev> defaults to
-/dev/lircd if none specified), and returns the Lirc::Client object. Pass
-a true value for B<debug> to have various debug information printed
-(defaults to false). A true value for the B<fake> flag will cause Lirc::Client
-to read STDIN rather than the lircd device (defaults to false), which is 
-primarily useful for debugging.
+/dev/lircd if none specified), and returns the Lirc::Client object.
 
-=item recognized_commands()
+=head2 recognized_commands()
 
   my @list = $lirc->recognized_commands;
 
 Returns a list of all the recognized commands for this application (as
 defined in C<prog> parameter to the call to B<new>).
 
-=item next_code()
+=head2 next_code()
 
-=item nextcode()
+=head2 nextcode()
 
   my $code = $lirc->next_code;
 
@@ -388,9 +407,9 @@ Retrieves the next IR command associated with the B<progname> as defined in
 B<new()>, blocking if none is available. B<next_code> uses the stdio read
 commands which are buffered. Use B<next_codes> if you are also using select.
 
-=item next_codes()
+=head2 next_codes()
 
-=item nextcodes()
+=head2 nextcodes()
 
   my @codes = $lirc->next_codes;
 
@@ -424,7 +443,7 @@ This is much more efficient than looping over B<next_code> in non-blocking
 mode. See the B<select.t> test for the complete example. Also, checkout the
 B<Event> module on CPAN for a nice way to handle your event loops.
 
-=item sock()
+=head2 sock()
 
   my $sock = $lirc->sock;
 
@@ -432,7 +451,7 @@ Returns (or sets if an argument is passed) the socket from which to read
 lirc commands. This can be used to work Lirc::Client into you own event 
 loop. 
 
-=item parse_line()
+=head2 parse_line()
 
   my $code = $lirc->parse_line( $line );
 
@@ -441,20 +460,18 @@ B<config> line of the lircrc file for that button. This can be used in
 combination with B<sock> to take more of the event loop control out of
 Lirc::Client.
 
-=item clean_up()
+=head2 clean_up()
 
   $lirc->clean_up;
 
 Closes the Lirc device pipe, etc. B<clean_up> will be called when the lirc
 object goes out of scope, so this is not necessary.
 
-=item debug()
+=head2 debug()
 
   $lirc->debug;
 
 Return the debug status for the lirc object.
-
-=back
 
 =head1 TODO
 

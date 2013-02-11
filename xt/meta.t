@@ -1,15 +1,22 @@
+#!/usr/bin/env perl
+
 # Test that our META.yml file matches the specification
 use strict;
-use warnings;
-use Test::More;
+
+BEGIN {
+    $|  = 1;
+    $^W = 1;
+}
 
 my @MODULES = ( 'Test::CPAN::Meta 0.12', );
 
-plan( skip_all => 'Only run meta test during RELEASE_TESTING' )
-    unless $ENV{RELEASE_TESTING};
+# Don't run tests during end-user installs
+use Test::More;
+# plan( skip_all => 'Author tests not required for installation' )
+#   unless ( $ENV{RELEASE_TESTING} or $ENV{AUTOMATED_TESTING} );
 
 # Load the testing modules
-for my $MODULE (@MODULES) {
+foreach my $MODULE (@MODULES) {
     eval "use $MODULE";
     if ($@) {
         $ENV{RELEASE_TESTING}
@@ -19,4 +26,5 @@ for my $MODULE (@MODULES) {
 }
 
 meta_yaml_ok();
+
 1;

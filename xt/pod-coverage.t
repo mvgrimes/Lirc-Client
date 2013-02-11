@@ -1,12 +1,23 @@
+#!/usr/bin/env perl
+
 # Ensure pod coverage in your distribution
 use strict;
-use warnings;
+
+BEGIN {
+    $|  = 1;
+    $^W = 1;
+}
+
+my @MODULES = ( 'Test::Pod::Coverage 1.08' );
+
+# Don't run tests during end-user installs
 use Test::More;
 
-my @MODULES = ( 'Test::Pod::Coverage 1.08', );
+# plan( skip_all => 'Author tests not required for installation' )
+#   unless ( $ENV{RELEASE_TESTING} );
 
 # Load the testing modules
-for my $MODULE (@MODULES) {
+foreach my $MODULE (@MODULES) {
     eval "use $MODULE";
     if ($@) {
         $ENV{RELEASE_TESTING}
@@ -15,5 +26,15 @@ for my $MODULE (@MODULES) {
     }
 }
 
-all_pod_coverage_ok();
+# Skip platform specific modules unless we are on that platform
+# Don't require any pod for Moose BUILD subs
+pod_coverage_ok(
+    $_,
+    {
+        trustme        => [qw{ BUILD BUILDARGS DEMOLISH }],
+        coverage_class => 'Pod::Coverage::TrustPod'
+    } ) for all_modules();
+
+done_testing;
+
 1;

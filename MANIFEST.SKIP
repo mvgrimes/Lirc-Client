@@ -10,6 +10,7 @@
 ^Lirc-Client-\d\.\d+
 .releaserc
 TODO
-^MYMETA.yml$
 .gitignore
+weaver.ini
+^MYMETA.yml$
 ^MYMETA\.json$

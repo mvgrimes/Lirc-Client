@@ -4,6 +4,7 @@ MYMETA.yml
 META.yml
 Changes.bak
 MYMETA.json
+META.json
 _build/
 blib/
 Lirc-Client-*.tar.gz

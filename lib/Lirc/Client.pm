@@ -1,127 +1,81 @@
 package Lirc::Client;
 
-###########################################################################
-# Lirc::Client
-# Mark Grimes
-# $Id: Client.pm,v 1.28 2007/12/10 22:45:58 mgrimes Exp $
-#
-# Package to interact with the LIRC deamon
-# Copyright (c) 2008 Mark Grimes (mgrimes AT alumni DOT duke DOT edu).
-# All rights reserved. This program is free software; you can redistribute
-# it and/or modify it under the same terms as Perl itself.
-#
-# Formatted with tabstops at 4
-#
-# Parts of this package were inspired by
-#  hotornot.pl by michael@engsoc.org, and
-#  Perl LIRC Client (plircc) by Matti Airas (mairas@iki.fi)
-# See http://www.lirc.org/html/technical.html for specs
-# Thanks!
-#
-###########################################################################
+# ABSTACT: A client library for the Linux Infrared Remote Control
 
-# TODO: see the todo section of the pod
-
-use strict;
-use warnings;
-use base qw(Class::Accessor::Fast);
-use Hash::Util qw(lock_keys);    # Lock a hash so no new keys can be added
+use Moo;
 use Carp;
 use IO::Socket;
 use File::Path::Expand;
 
-our $VERSION = '1.55';
-our $DEBUG   = 0;                # Class level debug flag
+our $VERSION = '2.00';
 
-# #########################################################
-#
-#	Fields contains all of the objects data which can be
-#	set/retreived by an accessor methods
-#
-# #########################################################
+has prog => ( is => 'ro', required => 1 );   # the program name from lircrc file
+has rcfile => ( is => 'ro', default => sub { "$ENV{HOME}/.lircrc" } );
+has dev => ( is => 'ro', default => sub { '/dev/lircd' } );    # lircd device
+has debug => ( is => 'ro', default => sub { 0 } );    # instance debug flag
+has fake  => ( is => 'ro', default => sub { 0 } );    # fake the lirc connection
+has sock          => ( is => 'rw' );                          # the lircd socket
+has mode          => ( is => 'rw', default => sub { '' } );
+has _in_block     => ( is => 'rw', default => sub { 0 } );
+has _commands     => ( is => 'rw', default => sub { {} } );
+has _startup_mode => ( is => 'rw' );
+has _buf          => ( is => 'rw', default => sub { '' } );
 
-my %fields = (    # List of all the fields which will have accessors
-    'prog'   => undef,                   # the program name from lircrc file
-    'rcfile' => "$ENV{HOME}/.lircrc",    # location of lircrc
-    'dev'    => '/dev/lircd',            # location of the lircd device
-    'debug'  => 0,                       # instance debug flag
-    'fake'   => 0,                       # fake the lirc connection
-    'sock'   => undef,                   # the lircd socket
-    'mode'   => '',
-);
-__PACKAGE__->mk_accessors( keys %fields );
-
-sub new {
-    my $that  = shift;
-    my $class = ref($that) || $that;     # Enables use to call $instance->new()
-    my $self  = {
-        '_DEBUG'        => 0,            # Instance level debug flag
-        '_in_block'     => 0,
-        '_commands'     => {},
-        '_startup_mode' => undef,
-        '_buf'          => '',
-        %fields,
-    };
-
-    # Process the arguments
-    my $cfg = {};
-    for (qw/prog rcfile dev debug fake/) {    # get any passed by order
-        my $arg = shift;
-        ( $cfg = $arg and last ) if ref $arg eq 'HASH';
-        $self->{$_} = $arg if defined $arg;
-    }
-    while ( my ( $k, $v ) = each %$cfg ) {    # now take care of those by name
-        $self->{$k} = $v;
-    }
-    bless $self, $class;
-
-    # Lock the $self hashref, so we don't accidentally add a key!
-    # TODO: how does this impact inheritance?
-    lock_keys(%$self);
-
-    croak "Lirc::Client not passed a program name" unless $self->prog;
-    $self->_initialize()
-      or croak "Lircd::Client couldn't initialize device $self->{dev}: $!";
-    return $self;
-}
-
-#  -------------------------------------------------------------------------------
-
-sub _initialize {
+sub BUILD {
     my $self = shift;
 
-    if ( $self->{fake} ) {
-        $self->{sock} = \*STDIN;
+    if ( $self->fake ) {
+        $self->sock( \*STDIN );
     } else {
-        $self->{sock} = IO::Socket->new(
-            Domain => &AF_UNIX,
-            Type   => SOCK_STREAM,
-            Peer   => $self->{dev}
-        ) or croak "couldn't connect to $self->{dev}: $!";
+        $self->sock(
+            IO::Socket->new(
+                Domain => &AF_UNIX,
+                Type   => SOCK_STREAM,
+                Peer   => $self->dev,
+            ) ) or croak "couldn't connect to $self->dev: $!";
     }
 
-    $self->_parse_lircrc( $self->{rcfile} );
-    $self->{mode} = $self->{_startup_mode} if defined $self->{_startup_mode};
+    $self->_parse_lircrc( $self->rcfile );
+    $self->mode( $self->_startup_mode ) if defined $self->_startup_mode;
     return 1;
 }
 
-# -------------------------------------------------------------------------------
+sub BUILDARGS {
+    my ( $class, @args ) = @_;
+
+    my $cfg       = {};
+    my @arg_names = qw{prog rcfile dev debug fake};    # get any passed by order
+
+    carp
+      "positional parameters for constructor is depreciated and will be removed from a future version"
+      if @args and ref $args[0] ne 'HASH';
+
+    while ( @args and ref $args[0] ne 'HASH' ) {
+        my $arg_name = shift @arg_names;
+        my $arg_val  = shift @args;
+        $cfg->{$arg_name} = $arg_val if defined $arg_val;
+    }
+
+    if ( ref $args[0] eq 'HASH' ) {
+        $cfg = { %$cfg, %{ shift @args } };    # Merge the two hashes
+    }
+
+    croak "new expects list of args or hash ref of named args" if @args;
+    return $cfg;
+}
 
 sub clean_up {
     my $self = shift;
 
-    if( defined $self->{sock} ){
-        close $self->{sock} unless $self->{fake};
+    if ( defined $self->sock ) {
+        close $self->sock unless $self->fake;
     }
 
     return;
 }
 
-# -------------------------------------------------------------------------------
-
 sub _parse_lircrc {    ## no critic
-    my $self       = shift;
-    my $rcfilename = shift;
+    my ( $self, $rcfilename ) = @_;
 
     open( my $rcfile, '<', $rcfilename )
       or croak "couldn't open lircrc file ($rcfilename): $!";
@@ -150,7 +104,7 @@ sub _parse_lircrc {    ## no critic
             {
                 croak "startup_mode flag given without a mode line"
                   unless defined $ops->{mode};
-                $self->{_startup_mode} = $ops->{mode};
+                $self->_startup_mode( $ops->{mode} );
                 next;
             }
 
@@ -163,9 +117,9 @@ sub _parse_lircrc {    ## no critic
             $in_block = 0;
             $ops      = {};
 
-            next unless $val->{prog} eq $self->{prog};
+            next unless $val->{prog} eq $self->prog;
 
-            $self->{_commands}->{$key} = $val;
+            $self->_commands->{$key} = $val;
 
             next;
         };
@@ -183,7 +137,7 @@ sub _parse_lircrc {    ## no critic
         ## begin mode
         /^\s*begin\s*([\w-]+)\s*$/i && do {
             croak "found embedded mode line: $_\n" if $1 && $cur_mode;
-            $self->{_startup_mode} = $1 if $1 eq $self->{prog};
+            $self->_startup_mode($1) if $1 eq $self->prog;
             $cur_mode = $1;
             next;
         };
@@ -214,41 +168,25 @@ sub _parse_lircrc {    ## no critic
         /^\s*$/ && next;
 
         ## unrecognized
-        croak
-          "Couldn't parse lircrc file ($self->{rcfile}) error in line: $_\n";
+        croak sprintf "Couldn't parse lircrc file (%s) error in line: %s\n",
+          $self->rcfile, $_;
     }
     close $rcfile;
 
     return;
 }
 
-# -------------------------------------------------------------------------------
-
 sub recognized_commands {
     my $self = shift;
 
-    return $self->{_commands};
-
-    # my @list;
-    # foreach my $c (keys %commands){
-    #   push @list, "$c:\n  ";
-    #   my %conf = %{$commands{$c}};
-    #   foreach my $i (keys %conf){
-    #     my $a = defined $conf{$i} ? $conf{$i} : 'undef';
-    #     push @list, "$i => $a,\n  ";
-    #   }
-    #   push @list, "\n";
-    # }
-    # return @list;
+    return $self->_commands;
 }
-
-# -------------------------------------------------------------------------------
 
 sub _get_lines {
     my $self = shift;
 
     # what is in the buffer now?
-    print "buffer1=", $self->{_buf}, "\n" if $self->debug;
+    printf "buffer1=%s\n", $self->_buf if $self->debug;
 
     # read anything in the pipe
     my $buf;
@@ -257,7 +195,7 @@ sub _get_lines {
 
     # what is in the buffer after the read?
     $self->{_buf} .= $buf;
-    print "buffer2=", $self->{_buf}, "\n" if $self->debug;
+    print "buffer2=%s\n", $self->_buf if $self->debug;
 
     # separate the lines, leaving partial lines on _buf
     my @lines;
@@ -309,28 +247,26 @@ sub next_code {
     return;    # no command found and lirc exited?
 }
 
-# -------------------------------------------------------------------------------
-
 sub parse_line {    ## parse a line read from lircd
     my $self = shift;
     $_ = shift;
 
-    print "> ($self->{_in_block}) $_\n" if $self->debug;
+    printf "> (%s) %s\n", $self->_in_block, $_ if $self->debug;
 
     # Take care of response blocks
     ## Right Lirc::Client doesn't support LIST or VERSION, so we can ignore
     ## Responses that come inside a block
     if (/^\s*BEGIN\s*$/) {
-        croak "got BEGIN inside a block from lircd: $_" if $self->{_in_block};
-        $self->{_in_block} = 1;
+        croak "got BEGIN inside a block from lircd: $_" if $self->_in_block;
+        $self->_in_block(1);
         return;
     }
     if (/^\s*END\s*$/) {
-        croak "got END outside a block from lircd: $_" if !$self->{_in_block};
-        $self->{_in_block} = 0;
+        croak "got END outside a block from lircd: $_" if !$self->_in_block;
+        $self->_in_block(0);
         return;
     }
-    return if $self->{_in_block};
+    return if $self->_in_block;
 
     # Decipher IR Command
     # http://www.lirc.org/html/technical.html#applications
@@ -341,8 +277,8 @@ sub parse_line {    ## parse a line read from lircd
         return;
     };
 
-    my $commands = $self->{_commands};
-    my $cur_mode = $self->{mode};
+    my $commands = $self->_commands;
+    my $cur_mode = $self->mode;
     my $command =
          $commands->{"$remote-$button-$cur_mode"}
       || $commands->{"*-$button-$cur_mode"}
@@ -354,49 +290,22 @@ sub parse_line {    ## parse a line read from lircd
     return if $rep_count ? hex($repeat) % $rep_count : hex $repeat;
 
     if ( defined $command->{flags} && $command->{flags} =~ /\bmode\b/ ) {
-        $self->{mode} = '';
+        $self->mode('');
     }
-    if ( defined $command->{mode} ) { $self->{mode} = $command->{mode}; }
+    if ( defined $command->{mode} ) { $self->mode( $command->{mode} ); }
 
     return unless defined $command->{config};
-    print ">> $button accepted --> @{[ $command->{config} ]}\n" if $self->debug;
+    printf ">> %s accepted --> %s\n", $button, $command->{config}
+      if $self->debug;
     return $command->{config};
 }
 
-sub DESTROY {
+sub DEMOLISH {
     my $self = shift;
-    print __PACKAGE__, ": DESTROY\n" if $self->debug;
+    print __PACKAGE__, ": DEMOLISH\n" if $self->debug;
 
     $self->clean_up;
     return;
-}
-
-# #########################################################
-#
-# Debug accessor
-# 	Can work on both the instance and the class
-#		$instance->debug([level]);
-#		PACKAGE->debug([level]);
-#
-# #########################################################
-
-sub debug {    ## no critic
-    my $self = shift;
-
-    if (@_) {    # Set the debug level
-        my $level = shift;
-        if ( ref($self) ) {
-            $self->{debug} = $level;
-        } else {
-            $DEBUG = $level;
-        }
-
-        # Call the parent class debug method
-        # TODO: check that it is an inherited class
-        # $self->SUPER::debug($debug);
-    }
-
-    return $DEBUG || $self->{debug};
 }
 
 1;
@@ -412,7 +321,7 @@ Lirc::Client - A client library for the Linux Infrared Remote Control
 
   use Lirc::Client;
   ...
-  my $lirc = Lirc::Client->new( 'progname' );
+  my $lirc = Lirc::Client->new({ prog => 'progname' });
   my $code;
   do {                            # Loop while getting ir codes
     $code = $lirc->next_code;     # wait for a new ir code
@@ -423,15 +332,14 @@ Lirc::Client - A client library for the Linux Infrared Remote Control
 =head1 DESCRIPTION
 
 This module provides a simple interface to the Linux Infrared Remote
-Control (Lirc). The module encasuplates parsing the Lirc config file (.lircrc),
-openning a connection to the Lirc device, and retrieving events from the 
+Control (Lirc). The module encapsulates parsing the Lirc config file (.lircrc),
+opening a connection to the Lirc device, and retrieving events from the 
 device.
 
 =head2 Use Details
 
 =over 4
 
-=item new( program, [rcfile], [dev], [debug], [fake] )
 
 =item new( program, \%options )
 
@@ -442,6 +350,8 @@ device.
                debug   => 0,                    # optional
                fake    => 1,                    # optional
         } );
+
+=item new( program, [rcfile], [dev], [debug], [fake] )
 
   # Depreciated positional syntax; don't use
   my $lirc = Lirc::Client->new( 'progname',    # required
@@ -459,7 +369,7 @@ config file, opens and parses the Lirc config file (B<rcfile> defaults to
 a true value for B<debug> to have various debug information printed
 (defaults to false). A true value for the B<fake> flag will cause Lirc::Client
 to read STDIN rather than the lircd device (defaults to false), which is 
-primarily useful for debuging.
+primarily useful for debugging.
 
 =item recognized_commands()
 
@@ -490,7 +400,7 @@ sysread so it is compatible with B<select> driven event loops. This is
 the most efficient method to accomplish a non-blocking read.
 
 Due to the mechanics of B<sysread> and B<select>, this version may
-return multiple ir codes so the return value is an array.
+return multiple IR codes so the return value is an array.
 
 Here is an example using IO::Select:
 
@@ -502,7 +412,7 @@ Here is an example using IO::Select:
         # do your own stuff, if you want
         if( my @ready = $select->can_read(0) ){ 
             # an ir event has been received (if you are tracking other
-			# filehandles, you need to make sure it is lirc)
+            # filehandles, you need to make sure it is lirc)
             my @codes = $lirc->next_codes;    # should not block
             for my $code (@codes){
                 process( $code );
@@ -512,13 +422,13 @@ Here is an example using IO::Select:
 
 This is much more efficient than looping over B<next_code> in non-blocking
 mode. See the B<select.t> test for the complete example. Also, checkout the
-B<Event> module on cpan for a nice way to handle your event loops.
+B<Event> module on CPAN for a nice way to handle your event loops.
 
 =item sock()
 
   my $sock = $lirc->sock;
 
-Returns (or sets if an arguement is passed) the socket from which to read
+Returns (or sets if an argument is passed) the socket from which to read
 lirc commands. This can be used to work Lirc::Client into you own event 
 loop. 
 
@@ -529,7 +439,7 @@ loop.
 Takes a full line as read from the lirc device and returns code on the 
 B<config> line of the lircrc file for that button. This can be used in 
 combination with B<sock> to take more of the event loop control out of
-Lirc::Cli
+Lirc::Client.
 
 =item clean_up()
 
@@ -549,7 +459,7 @@ Return the debug status for the lirc object.
 =head1 TODO
 
 Features that are outlined in the C<.lircrc> specification which have not yet
-been implmeneted include:
+been implemented include:
 
 =over 4
 
@@ -602,6 +512,12 @@ If anyone has need of one or more of these features, please let me know
 
 =back
 
+=head1 THANKS
+
+Parts of this package were inspired by a project by michael@engsoc.org and
+Perl LIRC Client (plircc) by Matti Airas (mairas@iki.fi).
+See http://www.lirc.org/html/technical.html for specs. Thanks!
+
 =head1 AUTHOR
 
 Mark Grimes E<lt>mgrimes@cpan.orgE<gt>
@@ -621,4 +537,3 @@ Copyright (C) 2011 by Mark Grimes
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.8.2 or,
 at your option, any later version of Perl 5 you may have available.
-
